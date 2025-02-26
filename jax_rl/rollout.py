@@ -3,6 +3,7 @@ from flax import struct
 import chex
 import numpy as np
 import jax.numpy as jnp
+import torch
 
 
 def rollout_policy(agent, env, exploration_rng,
@@ -184,7 +185,6 @@ def rollout_policy_ppo(agent, env, num_rollouts=5, discount=0.99, max_length=500
     n_rollouts = 0
 
     while n_rollouts < num_rollouts:
-
         action = agent.deterministic_action(obs)
 
         next_obs, reward, done, truncated, info = env.step(action)
@@ -192,6 +192,26 @@ def rollout_policy_ppo(agent, env, num_rollouts=5, discount=0.99, max_length=500
         obs = next_obs
 
         if "episode" in info.keys():
+            returns.append(info["episode"]["r"])
+            n_rollouts += 1
+
+        if (done or truncated):
+            obs, _ = env.reset()
+
+    return np.mean(np.array(returns))
+
+def rollout_policy_sac(agent, env, num_rollouts=5):
+    policy_returns, returns = [], []
+    obs, _ = env.reset()
+    n_rollouts = 0
+    while n_rollouts < num_rollouts:
+        obs = torch.Tensor(obs).to(0)
+        action = agent(obs)
+        action =action.cpu().numpy()
+        next_obs, reward, done, truncated, info = env.step(action)
+
+        obs = next_obs
+        if "episode" in info:
             returns.append(info["episode"]["r"])
             n_rollouts += 1
 
