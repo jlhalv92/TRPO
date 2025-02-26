@@ -28,7 +28,7 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="TRPO",
+    parser.add_argument("--wandb-project-name", type=str, default="TRPO-LOCOMOTION-ENVS",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default='',
         help="the entity (team) of wandb's project")
@@ -40,7 +40,7 @@ def parse_args():
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=1_000_000,
         help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate", type=float, default=0.00025,
+    parser.add_argument("--learning-rate", type=float, default=3e-4,
         help="the learning rate of the critic optimizer")
     parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments")
@@ -50,7 +50,7 @@ def parse_args():
         help="Toggle learning rate annealing for policy and value networks")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
-    parser.add_argument("--gae-lambda", type=float, default=0.98,
+    parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
     parser.add_argument("--num-minibatches", type=int, default=4,
         help="the number of mini-batches")
@@ -228,8 +228,9 @@ def experiment(run_id, args):
         wandb.init(
             project=args.wandb_project_name,
             config=vars(args),
-            name="TRPO",
+            name=args.env_id,
             job_type=f"seed_{run_id}",
+
             # monitor_gym=True, no longer works for gymnasium
             save_code=True,
         )
@@ -438,8 +439,8 @@ def experiment(run_id, args):
             eval_metrics = {"undisc_policy_return": undisc_policy_return}
 
             eval_metrics = {f'evaluation/{k}': v for k, v in eval_metrics.items()}
-
-            wandb.log(eval_metrics, step=int(total_steps), commit=True)
+            if args.track:
+                wandb.log(eval_metrics, step=int(total_steps), commit=True)
 
         # # TRY NOT TO MODIFY: record rewards for plotting purposes
         # writer.add_scalar("charts/critic_learning_rate", optimizer_critic.param_groups[0]["lr"], global_step)
