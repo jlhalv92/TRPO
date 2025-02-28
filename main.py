@@ -13,6 +13,7 @@ import torch.optim as optim
 from torch.distributions.kl import kl_divergence
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
+from jax_rl.dmc import DMCGym
 
 
 def parse_args():
@@ -34,11 +35,12 @@ def parse_args():
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
+    parser.add_argument("--algo_name", type=str, default="trpo",
+        help="name algorithm")
 
-    # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="HalfCheetah-v5",
+    parser.add_argument("--env_name", type=str, default="Humanoid-v5",
         help="the id of the environment")
-    parser.add_argument("--total-timesteps", type=int, default=1_000_000,
+    parser.add_argument("--total-timesteps", type=int, default=5_000_000,
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, default=3e-4,
         help="the learning rate of the critic optimizer")
@@ -52,9 +54,9 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--num-minibatches", type=int, default=1,
+    parser.add_argument("--num-minibatches", type=int, default=32,
         help="the number of mini-batches")
-    parser.add_argument("--update-epochs", type=int, default=1,
+    parser.add_argument("--update-epochs", type=int, default=10,
         help="the K epochs to update the policy")
     parser.add_argument("--norm-adv", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Toggles advantages normalization")
@@ -76,12 +78,12 @@ def parse_args():
     return args
 
 
-def make_env(env_id, idx, capture_video, run_name, gamma, evaluation=False):
+def make_env(env_name, idx, capture_video, run_name, gamma, evaluation=False):
     def thunk():
-        if capture_video:
-            env = gym.make(env_id, render_mode="rgb_array")
+        if args.env_name in ["walk","stand","trot","run"]:
+            env = DMCGym("dog",args.env_name)
         else:
-            env = gym.make(env_id)
+            env = gym.make(env_name)
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
@@ -250,10 +252,10 @@ def experiment(run_id, args):
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, i, args.capture_video, run_name, args.gamma) for i in range(args.num_envs)]
+        [make_env(args.env_name, i, args.capture_video, run_name, args.gamma) for i in range(args.num_envs)]
     )
     eval_env = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, i, args.capture_video, run_name, args.gamma, evaluation=True) for i in
+        [make_env(args.env_name, i, args.capture_video, run_name, args.gamma, evaluation=True) for i in
          range(args.num_envs)]
     )
 
@@ -318,8 +320,7 @@ def experiment(run_id, args):
                 if info is None:
                     continue
                 print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+
 
         # bootstrap value if not done
         with torch.no_grad():
